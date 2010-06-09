@@ -1,0 +1,20 @@
+html{
+    margin: 0;
+    padding: 0;
+}
+body{
+    margin: 0;
+    padding: 0;
+}
+
+h1{
+  margin: 0;
+  font-size: 100%;
+}
+
+div.keyboard {
+   -moz-user-select: none;
+   -khtml-user-select: none;
+   -webkit-user-select: none;
+   user-select: none;
+}
