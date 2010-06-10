@@ -53,14 +53,19 @@ var JSPiano = {
         keyboardDiv.style.top = "0px";
         keyboardDiv.style.height = JSPiano.KEY_WHITE.height + "px";
 
-        for(var j = 0; j < 12*8; ++j){
-            var o = Math.floor(j / 12);
-            var s = j % 12;
+        var pos = 0;
+        for(var n = 21; n <= 108; ++n, ++pos){
+            var o = Math.floor((n-24) / 12);
+            var s = (n-24) - o*12;
             
             var isBlack = !(s & 1) == (s >= 5);
-            var keyConst = isBlack ? JSPiano.KEY_BLACK
-                : JSPiano.KEY_WHITE;
-            var left = (o*14 + s + (s >= 5 ? 1 : 0)) * JSPiano.KEY_WHITE.width/2
+            var keyConst = isBlack ? JSPiano.KEY_BLACK : JSPiano.KEY_WHITE;
+
+            if(s == 0 || s == 5){
+                ++pos;
+            }
+            
+            var left = pos * JSPiano.KEY_WHITE.width/2;
             if(isBlack){
                 left += (JSPiano.KEY_WHITE.width-JSPiano.KEY_BLACK.width)/2;
                 left += (s==1 || s==6) ? -3 : (s==3 || s==10) ? 3 : 0;
