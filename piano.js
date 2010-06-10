@@ -113,6 +113,11 @@ JSPiano.Key = function(o, s, isBlack, keyConst, left)
     this.keyConst = keyConst;
 
     this.initEventListeners();
+
+    var notenum = 24 + (o*12+s);
+    var mediaType = "wav";
+    var audio = new Audio("./sounds/piano/44khz_" + mediaType + "/" + ("00" + notenum).slice(-3) + "." + mediaType);
+    this.audio = audio;
 }
 JSPiano.Key.prototype = {
     initEventListeners: function()
@@ -127,9 +132,13 @@ JSPiano.Key.prototype = {
     onKeyDown: function()
     {
         this.keyDiv.style.backgroundColor = this.keyConst.colorDown;
+//        this.audio.pause();
+        this.audio.load();
+        this.audio.play();
     },
     onKeyUp: function()
     {
         this.keyDiv.style.backgroundColor = this.keyConst.color;
+        //this.audio.pause();
     }
 };
