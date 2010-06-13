@@ -7,10 +7,9 @@
 // keycode = DOM Event Keycode
 
 // todo:
-// - オーディオのロード待ち
 // - 設定のクッキーへの保存
 // - キー割り当てのalert表示(初期割り当てを改善するため)
-// - 
+// - キー割り当て初期化ボタンを追加
 
 var JSPiano = {};
 
@@ -143,12 +142,12 @@ var JSPiano = {};
         return keyText;
     };
     
-    function createPianoKey(notenum, isBlack, keyConst, left, keyboardState) {
+    function createPianoKey(notenum, isBlack, left, keyboardState, audioSet) {
+        var keyConst = isBlack ? KEY_BLACK : KEY_WHITE;
         var keyDiv = createPianoKeyDiv(isBlack, keyConst, left);
         var keyText = null;
         
-        var mediaType = "wav";
-        var audio = Audio && new Audio("./sounds/piano/44khz_" + mediaType + "/" + ("00" + notenum).slice(-3) + "." + mediaType);
+        var audio = audioSet.notes[notenum];
 
         function seekAudioBegin() {
             if(audio){
@@ -217,8 +216,9 @@ var JSPiano = {};
         button.style.borderWidth = "1px";
         button.style.borderStyle = "solid";
         button.style.borderColor = "#000000";
-        button.style.width = "20px";
+        button.style.width = "24px";
         button.style.height = "20px";
+        button.style.marginRight = "4px";
         div.appendChild(button);
         var text = document.createTextNode(text);
         div.appendChild(text);
@@ -305,30 +305,27 @@ var JSPiano = {};
         return keyboardDiv;
     };
 
-    function placePianoKeys(keyboardDiv, keyboardState) {
+    function placePianoKeys(keyboardDiv, keyboardState, audioSet) {
         var keyObjArray = [];
-        var notenumMin = 21;
-        var notenumMax = 108;
         
         var pos = 0;
-        for(var notenum = notenumMin; notenum <= notenumMax; ++notenum, ++pos){
+        for(var notenum = audioSet.notenumMin; notenum <= audioSet.notenumMax; ++notenum, ++pos){
             var o = Math.floor((notenum-12) / 12);
             var s = (notenum-12) - o*12;
             
             var isBlack = !(s & 1) == (s >= 5);
-            var keyConst = isBlack ? KEY_BLACK : KEY_WHITE;
 
-            if(s == 0 || s == 5){
-                ++pos;
-            }
-            
             var left = pos * KEY_WHITE.width/2;
             if(isBlack){
                 left += (KEY_WHITE.width-KEY_BLACK.width)/2;
                 left += (s==1 || s==6) ? -3 : (s==3 || s==10) ? 3 : 0;
             }
-        
-            var keyObj = createPianoKey(notenum, isBlack, keyConst, left, keyboardState);
+
+            if(s == 11 || s == 4){
+                ++pos;
+            }
+            
+            var keyObj = createPianoKey(notenum, isBlack, left, keyboardState, audioSet);
             keyObjArray[notenum] = keyObj;
             keyboardDiv.appendChild(keyObj.getElement());
 
@@ -369,7 +366,7 @@ var JSPiano = {};
         };
         
         var buttonSustain = createFunctionKey(0, 140, "Sustain", updateSustainState, updateSustainState);
-        var buttonSustainLock = createFunctionKey(200, 140, "Sustain Lock", updateSustainState, updateSustainState, true);
+        var buttonSustainLock = createFunctionKey(150, 140, "Sustain Lock", updateSustainState, updateSustainState, true);
         keyboardDiv.appendChild(buttonSustain.getElement());
         keyboardDiv.appendChild(buttonSustainLock.getElement());
         
@@ -377,12 +374,12 @@ var JSPiano = {};
     };
 
     
-    function createPianoKeyboard() {
+    function createPianoKeyboard(audioSet) {
         var keyboardState = {
             sustain: false
         };
         var keyboardDiv = createPianoKeyboardDiv();
-        var pianoKeys = placePianoKeys(keyboardDiv, keyboardState);
+        var pianoKeys = placePianoKeys(keyboardDiv, keyboardState, audioSet);
         var functionKeys = placeFunctionKeys(keyboardDiv, keyboardState, pianoKeys);
         var allKeys = pianoKeys.concat(functionKeys);
 
@@ -480,10 +477,115 @@ var JSPiano = {};
         return keyboardObj;
     };
 
+    //
+    function getSupportedMediaType() {
+        try{
+            var audio = new Audio("");
+            var result;
+            if(audio.canPlayType){
+                result = audio.canPlayType("audio/ogg");
+                if(result != "no" && result != ""){
+                    return "ogg";
+                }
+                result = audio.canPlayType("audio/mpeg");
+                if(result != "no" && result != ""){
+                    return "mp3";
+                }
+                result = audio.canPlayType("audio/wav");
+                if(result != "no" && result != ""){
+                    return "wav";
+                }
+                result = audio.canPlayType("audio/x-wav");
+                if(result != "no" && result != ""){
+                    return "wav";
+                }
+            }
+        }
+        catch(e){}
+        return undefined;
+    };
+
+
+    function createAudio(notenum, mediaType, funcLoaded) {
+        var audio = new Audio("./sounds/piano/44khz_" + mediaType + "/" + ("00" + notenum).slice(-3) + "." + mediaType);
+        function onCanPlayThrough() {
+            audio.removeEventListener("canplaythrough", onCanPlayThrough, true);
+            funcLoaded();
+        };
+        function onError() {
+            audio.removeEventListener("error", onError, true);
+            funcLoaded();
+        };
+        audio.addEventListener("canplaythrough", onCanPlayThrough, true);
+        audio.addEventListener("error", onError, true);
+        audio.load();
+        return audio;
+    };
+    
+    function createAudioSet(funcProgress, funcCompleted) {
+        var audioSet = {
+            notenumMin: 21,
+            notenumMax: 108,
+            notes: [],
+            countTotal: 0,
+            countLoaded: 0
+        };
+        var mediaType = getSupportedMediaType();
+        if(!mediaType){
+            alert("html5 audio not supported.");
+            return audioSet;
+        }
+        
+        function onAudioLoaded() {
+            if(++audioSet.countLoaded == audioSet.countTotal){
+                funcCompleted();
+            }
+            else{
+                funcProgress(audioSet);
+            }
+        };
+        
+        audioSet.countTotal = audioSet.notenumMax - audioSet.notenumMin + 1;
+        for(var notenum = audioSet.notenumMin; notenum <= audioSet.notenumMax; ++notenum){
+            audioSet.notes[notenum] = createAudio(notenum, mediaType, onAudioLoaded);
+        }
+        return audioSet;
+    };
+
+    function createPianoDiv() {
+        var div = document.createElement("div");
+        return div;
+    };
+    
+    function createPiano() {
+        var pianoDiv = createPianoDiv();
+        
+        var loadingText = document.createTextNode("Loading...");
+        pianoDiv.appendChild(loadingText);
+
+        var funcProgress = function(as){
+            pianoDiv.removeChild(loadingText);
+            loadingText = document.createTextNode("Loading... (" + as.countLoaded + "/" + as.countTotal + ")");
+            pianoDiv.appendChild(loadingText);
+        };
+        var funcCompleted = function(){
+            pianoDiv.removeChild(loadingText);
+            pianoDiv.appendChild(createPianoKeyboard(audioSet).getElement());
+        };
+        
+        var audioSet = createAudioSet(funcProgress, funcCompleted);
+
+        var pianoObj = {
+            getElement: function() { return pianoDiv;},
+            audioSet: audioSet,
+        };
+        return pianoObj;
+    };
+    
     // public functions
     
     JSPiano.insertKeyboardAfterThisScriptNode = function() {
         var parent = getLastScriptNode().parentNode;
-        parent.appendChild(createPianoKeyboard().getElement());
+        parent.appendChild(createPiano().getElement());
     };
 })();
