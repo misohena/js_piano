@@ -8,12 +8,8 @@
 
 // todo:
 // - 設定のクッキーへの保存
-// - キー割り当てのalert表示(初期割り当てを改善するため)
-// - キー割り当て初期化ボタンを追加
 
-var JSPiano = {};
-
-(function(){
+JSPiano = (function(){
 
     // DOM Utilities
 
@@ -84,29 +80,8 @@ var JSPiano = {};
     function convertKeycodeToKeytext(keycode) {
         return KEYCODE_NAME_MAP[keycode] || keycode.toString();
     };
-    var DEFAULT_PIANO_KEY_MAP = {
-        84:60,
-        54:61,
-        89:62,
-        55:63,
-        85:64,
-        73:65,
-        57:66,
-        79:67,
-        48:68,
-        80:69,
-        109:70,
-        192:71,
-        219:72,
-        220:73,
-        13:74,
-        8:75,
-        46:76
-    };
-    var DEFAULT_FUNCTION_KEY_MAP = {
-        32: 0,
-        17: 1,
-    };
+    var DEFAULT_PIANO_KEY_MAP = {49:56,50:58,81:57,87:59,69:60,52:61,82:62,53:63,84:64,89:65,55:66,85:67,56:68,73:69,57:70,79:71,80:72,109:73,192:74,222:75,219:76,13:77,8:78,46:79,65:32,90:33,83:34,88:35,67:36,70:37,86:38,71:39,66:40,78:41,74:42,77:43,75:44,188:45,76:46,190:47,191:48,59:49,226:50,221:51};
+    var DEFAULT_FUNCTION_KEY_MAP = {32:0,17:1};
     
     
     // Piano Constants
@@ -142,7 +117,7 @@ var JSPiano = {};
         return keyText;
     };
     
-    function createPianoKey(notenum, isBlack, left, keyboardState, audioSet) {
+    function createPianoKey(notenum, isBlack, left, audioSet, pianoKeyboard) {
         var keyConst = isBlack ? KEY_BLACK : KEY_WHITE;
         var keyDiv = createPianoKeyDiv(isBlack, keyConst, left);
         var keyText = null;
@@ -173,7 +148,7 @@ var JSPiano = {};
             keyDiv.style.backgroundColor = keyConst.color;
             pressed = false;
             pressedByMouse = false;
-            if( ! keyboardState.sustain){
+            if( ! pianoKeyboard.sustain){
                 audio.pause();
             }
         };
@@ -288,196 +263,262 @@ var JSPiano = {};
             }
         };
     };
-    
+
+
+    // class KeyMap
+
+    function createKeyMap() {
+        var keyMap = {}; // keycode to key object.
+
+        return {
+            setMapKeycodeToKeyObject: function(keycode, keyObj) {
+                if(keyObj){
+                    
+                    for(var w in keyMap){
+                        if(keyMap[w] == keyObj){
+                            delete keyMap[w];
+                        }
+                    }
+                    
+                    if(keyMap[keycode]){
+                        keyMap[keycode].setKeyText("");
+                    }
+                    
+                    keyMap[keycode] = keyObj;
+                    keyObj.setKeyText(convertKeycodeToKeytext(keycode));
+                    return true;
+                }
+                return false;
+            },
+
+            clearKeyMap: function () {
+                for(var keycode in keyMap){
+                    if(keyMap[keycode]){
+                        keyMap[keycode].setKeyText("");
+                    }
+                    delete keyMap[keycode];
+                }
+            },
+
+            onKeyDown: function(ev) {
+                var keycode = ev.which.toString();
+                var keyObj = keyMap[keycode];
+                if(keyObj){
+                    keyObj.press();
+                }
+            },
+        
+            onKeyUp: function(ev){
+                var keycode = ev.which.toString();
+                var keyObj = keyMap[keycode];
+                if(keyObj){
+                    keyObj.release();
+                }
+            },
+
+            enumerateKeyIndex: function(keys) { //(keys:Array)->Object
+                var result = {};
+                for(var key in keyMap){
+                    var index = keys.indexOf(keyMap[key]);
+                    if(index >= 0){
+                        result[key] = index;
+                    }
+                }
+                return result;
+            }
+        };
+    };
     
     // class PianoKeyboard
 
-    function createPianoKeyboardDiv() {
-        var keyboardDiv = document.createElement("div");
-        keyboardDiv.className = "keyboard";
-        keyboardDiv.style.borderWidth = "1px";
-        keyboardDiv.style.borderColor = "#000000";
-        keyboardDiv.style.borderStyle = "solid";
-        keyboardDiv.style.position = "relative";
-        keyboardDiv.style.left = "0px";
-        keyboardDiv.style.top = "0px";
-        keyboardDiv.style.height = KEY_WHITE.height + "px";
-        return keyboardDiv;
+    function PianoKeyboard(audioSet){
+        this.keyMap = createKeyMap();
+        this.sustain = false;
+        this.keyboardDiv = this.createPianoKeyboardDiv();
+        this.pianoKeys = this.placePianoKeys(audioSet);
+        this.functionKeys =
+            this.placeSustainKeys().concat(
+            this.placeConfigKeys());
+        this.allKeys = this.pianoKeys.concat(this.functionKeys);
+        this.initKeyMap();
+        this.setWindowKeyEventListener();
     };
+    PianoKeyboard.prototype = {
+        createPianoKeyboardDiv: function() {
+            var keyboardDiv = document.createElement("div");
+            keyboardDiv.className = "keyboard";
+            keyboardDiv.style.borderWidth = "1px";
+            keyboardDiv.style.borderColor = "#000000";
+            keyboardDiv.style.borderStyle = "solid";
+            keyboardDiv.style.position = "relative";
+            keyboardDiv.style.left = "0px";
+            keyboardDiv.style.top = "0px";
+            keyboardDiv.style.height = KEY_WHITE.height + "px";
+            return keyboardDiv;
+        },
 
-    function placePianoKeys(keyboardDiv, keyboardState, audioSet) {
-        var keyObjArray = [];
+        placePianoKeys: function (audioSet) {
+            var keyObjArray = [];
         
-        var pos = 0;
-        for(var notenum = audioSet.notenumMin; notenum <= audioSet.notenumMax; ++notenum, ++pos){
-            var o = Math.floor((notenum-12) / 12);
-            var s = (notenum-12) - o*12;
+            var pos = 0;
+            for(var notenum = audioSet.notenumMin; notenum <= audioSet.notenumMax; ++notenum, ++pos){
+                var o = Math.floor((notenum-12) / 12);
+                var s = (notenum-12) - o*12;
+                
+                var isBlack = !(s & 1) == (s >= 5);
+
+                var left = pos * KEY_WHITE.width/2;
+                if(isBlack){
+                    left += (KEY_WHITE.width-KEY_BLACK.width)/2;
+                    left += (s==1 || s==6) ? -3 : (s==3 || s==10) ? 3 : 0;
+                }
+
+                if(s == 11 || s == 4){
+                    ++pos;
+                }
+                
+                var keyObj = createPianoKey(notenum, isBlack, left, audioSet, this);
+                keyObjArray[notenum] = keyObj;
+                this.keyboardDiv.appendChild(keyObj.getElement());
+
+                if(s == 0){
+                    var posTextDiv = document.createElement("div");
+                    posTextDiv.style.position = "absolute";
+                    posTextDiv.style.left = left + "px";
+                    posTextDiv.style.fontSize = KEY_WHITE.width + "px";
+                    posTextDiv.style.top = KEY_WHITE.height + "px";
+                    posTextDiv.appendChild(document.createTextNode("C" + o));
+                    this.keyboardDiv.appendChild(posTextDiv);
+                }
+            }
+            return keyObjArray;
+        },
+
+        placeSustainKeys: function(){
+            var self = this;
             
-            var isBlack = !(s & 1) == (s >= 5);
-
-            var left = pos * KEY_WHITE.width/2;
-            if(isBlack){
-                left += (KEY_WHITE.width-KEY_BLACK.width)/2;
-                left += (s==1 || s==6) ? -3 : (s==3 || s==10) ? 3 : 0;
-            }
-
-            if(s == 11 || s == 4){
-                ++pos;
-            }
-            
-            var keyObj = createPianoKey(notenum, isBlack, left, keyboardState, audioSet);
-            keyObjArray[notenum] = keyObj;
-            keyboardDiv.appendChild(keyObj.getElement());
-
-            if(s == 0){
-                var posTextDiv = document.createElement("div");
-                posTextDiv.style.position = "absolute";
-                posTextDiv.style.left = left + "px";
-                posTextDiv.style.fontSize = KEY_WHITE.width + "px";
-                posTextDiv.style.top = KEY_WHITE.height + "px";
-                posTextDiv.appendChild(document.createTextNode("C" + o));
-                keyboardDiv.appendChild(posTextDiv);
-            }
-        }
-        return keyObjArray;
-    };
-
-    function placeFunctionKeys(keyboardDiv, keyboardState, pianoKeys){
-        function stopReleasedNotes() {
-            for(notenum = 0; notenum < pianoKeys.length; ++notenum){
-                var keyObj = pianoKeys[notenum];
-                if(keyObj){
-                    if( ! keyObj.isPressed()){
-                        keyObj.stop();
+            function stopReleasedNotes() {
+                for(notenum = 0; notenum < self.pianoKeys.length; ++notenum){
+                    var keyObj = self.pianoKeys[notenum];
+                    if(keyObj){
+                        if( ! keyObj.isPressed()){
+                            keyObj.stop();
+                        }
                     }
                 }
-            }
-        };
-        function setSustainState(b) {
-            if(keyboardState.sustain != b){
-                keyboardState.sustain = b;
-                if(!b){
-                    stopReleasedNotes();
-                }
-            }
-        };
-        function updateSustainState(){
-            setSustainState(buttonSustain.isPressed() || buttonSustainLock.isSelected());
-        };
-        
-        var buttonSustain = createFunctionKey(0, 140, "Sustain", updateSustainState, updateSustainState);
-        var buttonSustainLock = createFunctionKey(150, 140, "Sustain Lock", updateSustainState, updateSustainState, true);
-        keyboardDiv.appendChild(buttonSustain.getElement());
-        keyboardDiv.appendChild(buttonSustainLock.getElement());
-        
-        return [buttonSustain, buttonSustainLock];
-    };
-
-    
-    function createPianoKeyboard(audioSet) {
-        var keyboardState = {
-            sustain: false
-        };
-        var keyboardDiv = createPianoKeyboardDiv();
-        var pianoKeys = placePianoKeys(keyboardDiv, keyboardState, audioSet);
-        var functionKeys = placeFunctionKeys(keyboardDiv, keyboardState, pianoKeys);
-        var allKeys = pianoKeys.concat(functionKeys);
-
-        // key input
-        
-        var keyMap = {}; // keycode to key object.
-
-        function setMapKeycodeToKeyObject(keycode, keyObj) {
-            if(keyObj){
-                
-                for(var w in keyMap){
-                    if(keyMap[w] == keyObj){
-                        delete keyMap[w];
+            };
+            function setSustainState(b) {
+                if(self.sustain != b){
+                    self.sustain = b;
+                    if(!b){
+                        stopReleasedNotes();
                     }
                 }
-                
-                if(keyMap[keycode]){
-                    keyMap[keycode].setKeyText("");
-                }
-                
-                keyMap[keycode] = keyObj;
-                keyObj.setKeyText(convertKeycodeToKeytext(keycode));
-                return true;
-            }
-            return false;
-        };
+            };
+            function updateSustainState(){
+                setSustainState(buttonSustain.isPressed() || buttonSustainLock.isSelected());
+            };
+            
+            var buttonSustain = createFunctionKey(0, 140, "Sustain", updateSustainState, updateSustainState);
+            var buttonSustainLock = createFunctionKey(120, 140, "Sustain Lock", updateSustainState, updateSustainState, true);
+            this.keyboardDiv.appendChild(buttonSustain.getElement());
+            this.keyboardDiv.appendChild(buttonSustainLock.getElement());
+        
+            return [buttonSustain, buttonSustainLock];
+        },
 
-        function clearKeyMap() {
-            for(var keycode in keyMap){
-                if(keyMap[keycode]){
-                    keyMap[keycode].setKeyText("");
-                }
-                delete keyMap[keycode];
-            }
-        };
+        placeConfigKeys: function(){
+            var self = this;
+            var buttonInitKeyMap = createFunctionKey(240, 140, "Init Keymap", null, function() { self.initKeyMap();});
+            this.keyboardDiv.appendChild(buttonInitKeyMap.getElement());
 
-        function restoreKeyMap(pianoKeyMap, functionKeyMap) {
-            clearKeyMap();
+            var buttonShowKeyMap = createFunctionKey(360, 140, "Show Keymap", null, function() { self.showKeyMap();});
+            this.keyboardDiv.appendChild(buttonShowKeyMap.getElement());
+            
+            var buttonSaveKeyMap = createFunctionKey(480, 140, "Save Keymap to cookie", null, function() { self.saveKeyMap();});
+            this.keyboardDiv.appendChild(buttonSaveKeyMap.getElement());
+            
+            return [buttonInitKeyMap, buttonShowKeyMap, buttonSaveKeyMap];
+        },
+
+        initKeyMap: function() {
+            this.restoreKeyMap(DEFAULT_PIANO_KEY_MAP, DEFAULT_FUNCTION_KEY_MAP);
+        },
+
+        showKeyMap: function() {
+            var km1 = this.keyMap.enumerateKeyIndex(this.pianoKeys);
+            var km2 = this.keyMap.enumerateKeyIndex(this.functionKeys);
+            function keyMapToStr(km){
+                var str = "";
+                var key;
+                for(key in km){
+                    if(str.length != 0){
+                        str += ",";
+                    }
+                    str += key + ":" + km[key];
+                }
+                return str;
+            };
+
+            alert("DEFAULT_PIANO_KEY_MAP = {" + keyMapToStr(km1) + "};\n" +
+                  "DEFAULT_FUNCTION_KEY_MAP = {" + keyMapToStr(km2) + "};");
+        },
+        
+        restoreKeyMap: function(pianoKeyMap, functionKeyMap) {
+            this.keyMap.clearKeyMap();
             var keyObj;
             for(var keycode in pianoKeyMap){
                 var notenum = pianoKeyMap[keycode];
-                keyObj = pianoKeys[notenum];
+                keyObj = this.pianoKeys[notenum];
                 if(keyObj){
-                    setMapKeycodeToKeyObject(keycode, keyObj);
+                    this.keyMap.setMapKeycodeToKeyObject(keycode, keyObj);
                 }
             }
             for(var keycode in functionKeyMap){
                 var index = functionKeyMap[keycode];
-                keyObj = functionKeys[index];
+                keyObj = this.functionKeys[index];
                 if(keyObj){
-                    setMapKeycodeToKeyObject(keycode, keyObj);
+                    this.keyMap.setMapKeycodeToKeyObject(keycode, keyObj);
                 }
             }
-        };
-        restoreKeyMap(DEFAULT_PIANO_KEY_MAP, DEFAULT_FUNCTION_KEY_MAP);
+        },
 
-        function findFirstPressedKeyByMouse() {
-            for(var i = 0; i < allKeys.length; ++i){
-                var keyObj = allKeys[i];
+        findFirstPressedKeyByMouse: function() {
+            for(var i = 0; i < this.allKeys.length; ++i){
+                var keyObj = this.allKeys[i];
                 if(keyObj && keyObj.isPressedByMouse()){
                     return keyObj;
                 }
             }
             return undefined;
-        };
+        },
 
-        window.addEventListener("keydown", function(ev){
-            var keycode = ev.which.toString();
-
-            // customize a mapping of keycode to key object.
-            setMapKeycodeToKeyObject(keycode, findFirstPressedKeyByMouse());
-
-            // play.
-            var keyObj = keyMap[keycode];
-            if(keyObj){
-                keyObj.press();
-            }
-        }, true);
+        setWindowKeyEventListener: function() {
+            var self = this;
+            window.addEventListener("keydown", function(ev){
+                // customize a mapping of keycode to key object.
+                var keycode = ev.which.toString();
+                self.keyMap.setMapKeycodeToKeyObject(keycode, self.findFirstPressedKeyByMouse());
+                
+                // play.
+                self.keyMap.onKeyDown(ev);
+            }, true);
         
-        window.addEventListener("keyup", function(ev){
-            var keycode = ev.which.toString();
+            window.addEventListener("keyup", function(ev){
+                self.keyMap.onKeyUp(ev);
+            }, true);
+        },
 
-            // stop.
-            var keyObj = keyMap[keycode];
-            if(keyObj){
-                keyObj.release();
-            }
-        }, true);
-
-        var keyboardObj = {
-            getElement: function() {
-                return keyboardDiv;
-            }
-        };
-        return keyboardObj;
+        getElement: function() {
+            return this.keyboardDiv;
+        }
+    };
+    function createPianoKeyboard(audioSet) {
+        return new PianoKeyboard(audioSet);
     };
 
-    //
+    // class Audio
+
     function getSupportedMediaType() {
         try{
             var audio = new Audio("");
@@ -505,7 +546,6 @@ var JSPiano = {};
         return undefined;
     };
 
-
     function createAudio(notenum, mediaType, funcLoaded) {
         var audio = new Audio("./sounds/piano/44khz_" + mediaType + "/" + ("00" + notenum).slice(-3) + "." + mediaType);
         function onCanPlayThrough() {
@@ -521,6 +561,8 @@ var JSPiano = {};
         audio.load();
         return audio;
     };
+
+    // class AudioSet
     
     function createAudioSet(funcProgress, funcCompleted) {
         var audioSet = {
@@ -552,6 +594,8 @@ var JSPiano = {};
         return audioSet;
     };
 
+    // class Piano
+    
     function createPianoDiv() {
         var div = document.createElement("div");
         return div;
@@ -583,9 +627,11 @@ var JSPiano = {};
     };
     
     // public functions
-    
-    JSPiano.insertKeyboardAfterThisScriptNode = function() {
-        var parent = getLastScriptNode().parentNode;
-        parent.appendChild(createPiano().getElement());
+
+    return {
+        insertKeyboardAfterThisScriptNode: function() {
+            var parent = getLastScriptNode().parentNode;
+            parent.appendChild(createPiano().getElement());
+        }
     };
 })();
