@@ -353,7 +353,7 @@ JSPiano = (function(){
             keyboardDiv.style.position = "relative";
             keyboardDiv.style.left = "0px";
             keyboardDiv.style.top = "0px";
-            keyboardDiv.style.height = KEY_WHITE.height + "px";
+            keyboardDiv.style.height = "200px";
             return keyboardDiv;
         },
 
