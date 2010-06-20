@@ -6,12 +6,9 @@
 // notenum = MIDI Note Number
 // keycode = DOM Event Keycode
 
-// todo:
-// - 設定のクッキーへの保存
-
 JSPiano = (function(){
 
-    // DOM Utilities
+    // Utilities
 
     function getLastScriptNode() {
         var n = document;
@@ -38,6 +35,42 @@ JSPiano = (function(){
                 elem.attachEvent(evname, func);
             }
         }
+    };
+
+    function setCookie(cookieName, data) {
+        var value = "";
+        for(var key in data){
+            if(value){
+                value += "&";
+            }
+            value += key + ":" + data[key];
+        }
+
+        var expires = new Date();
+        expires.setFullYear(expires.getFullYear() + 1);
+        document.cookie = cookieName + "=" + value + ";expires=" + expires.toGMTString();
+    };
+
+    function getCookie(cookieName) {
+        var cookies = document.cookie;
+        var pos = cookies.indexOf(cookieName + "=");
+        if(pos == -1){
+            return {};
+        }
+        var first = pos + cookieName.length + 1;
+        var last = cookies.indexOf(";", first);
+        if(last == -1){
+            last = cookies.length;
+        }
+        var cookieValue = cookies.substring(first, last);
+        var lines = cookieValue.split("&");
+        var data = {};
+        var i;
+        for(i = 0; i < lines.length; ++i){
+            var keyval = lines[i].split(":");
+            data[keyval[0]] = keyval[1];
+        }
+        return data;
     };
 
     // Keyboard Constants
@@ -82,6 +115,20 @@ JSPiano = (function(){
     };
     var DEFAULT_PIANO_KEY_MAP = {49:56,50:58,81:57,87:59,69:60,52:61,82:62,53:63,84:64,89:65,55:66,85:67,56:68,73:69,57:70,79:71,80:72,109:73,192:74,222:75,219:76,13:77,8:78,46:79,65:32,90:33,83:34,88:35,67:36,70:37,86:38,71:39,66:40,78:41,74:42,77:43,75:44,188:45,76:46,190:47,191:48,59:49,226:50,221:51};
     var DEFAULT_FUNCTION_KEY_MAP = {32:0,17:1};
+
+    function convertKeyMapToStr(km, comma, colon){
+        if(!comma) { comma = ",";}
+        if(!colon) { colon = ":";}
+        var str = "";
+        var key;
+        for(key in km){
+            if(str.length != 0){
+                str += comma;
+            }
+            str += key + colon + km[key];
+        }
+        return str;
+    };
     
     
     // Piano Constants
@@ -305,6 +352,7 @@ JSPiano = (function(){
                 var keyObj = keyMap[keycode];
                 if(keyObj){
                     keyObj.press();
+                    ev.preventDefault();
                 }
             },
         
@@ -313,6 +361,7 @@ JSPiano = (function(){
                 var keyObj = keyMap[keycode];
                 if(keyObj){
                     keyObj.release();
+                    ev.preventDefault();
                 }
             },
 
@@ -335,12 +384,14 @@ JSPiano = (function(){
         this.keyMap = createKeyMap();
         this.sustain = false;
         this.keyboardDiv = this.createPianoKeyboardDiv();
-        this.pianoKeys = this.placePianoKeys(audioSet);
+        this.pianoKeys = this.placePianoKeys(audioSet, this.keyboardDiv);
         this.functionKeys =
             this.placeSustainKeys().concat(
             this.placeConfigKeys());
         this.allKeys = this.pianoKeys.concat(this.functionKeys);
-        this.initKeyMap();
+        if(!this.loadKeyMap()){
+            this.initKeyMap();
+        }
         this.setWindowKeyEventListener();
     };
     PianoKeyboard.prototype = {
@@ -357,7 +408,7 @@ JSPiano = (function(){
             return keyboardDiv;
         },
 
-        placePianoKeys: function (audioSet) {
+        placePianoKeys: function (audioSet, keyboardDiv) {
             var keyObjArray = [];
         
             var pos = 0;
@@ -391,6 +442,10 @@ JSPiano = (function(){
                     this.keyboardDiv.appendChild(posTextDiv);
                 }
             }
+
+            var right = left + (isBlack ? KEY_BLACK.width : KEY_WHITE.width);
+            keyboardDiv.style.width = right + 2 + "px";
+            
             return keyObjArray;
         },
 
@@ -448,22 +503,44 @@ JSPiano = (function(){
         showKeyMap: function() {
             var km1 = this.keyMap.enumerateKeyIndex(this.pianoKeys);
             var km2 = this.keyMap.enumerateKeyIndex(this.functionKeys);
-            function keyMapToStr(km){
-                var str = "";
-                var key;
-                for(key in km){
-                    if(str.length != 0){
-                        str += ",";
-                    }
-                    str += key + ":" + km[key];
-                }
-                return str;
-            };
 
-            alert("DEFAULT_PIANO_KEY_MAP = {" + keyMapToStr(km1) + "};\n" +
-                  "DEFAULT_FUNCTION_KEY_MAP = {" + keyMapToStr(km2) + "};");
+            alert("DEFAULT_PIANO_KEY_MAP = {" + convertKeyMapToStr(km1) + "};\n" +
+                  "DEFAULT_FUNCTION_KEY_MAP = {" + convertKeyMapToStr(km2) + "};");
         },
-        
+
+        saveKeyMap: function() {
+            var km1 = this.keyMap.enumerateKeyIndex(this.pianoKeys);
+            var km2 = this.keyMap.enumerateKeyIndex(this.functionKeys);
+            setCookie("config", {
+                "PIANO_KEY_MAP": convertKeyMapToStr(km1, "_", "_"),
+                "FUNCTION_KEY_MAP": convertKeyMapToStr(km2, "_", "_")
+            });
+        },
+
+        loadKeyMap: function() {
+            var config = getCookie("config");
+            var pkms = config["PIANO_KEY_MAP"];
+            var fkms = config["FUNCTION_KEY_MAP"];
+            if(!pkms || !fkms){
+                return false;
+            }
+
+            pkms = pkms.split("_");
+            fkms = fkms.split("_");
+            var pkm = {};
+            var fkm = {};
+            for(i = 0; i < pkms.length/2; ++i){
+                pkm[parseInt(pkms[i*2])] = parseInt(pkms[i*2+1]);
+            }
+            for(i = 0; i < fkms.length/2; ++i){
+                fkm[parseInt(fkms[i*2])] = parseInt(fkms[i*2+1]);
+            }
+            
+            this.restoreKeyMap(pkm, fkm);
+            
+            return true;
+        },
+
         restoreKeyMap: function(pianoKeyMap, functionKeyMap) {
             this.keyMap.clearKeyMap();
             var keyObj;
