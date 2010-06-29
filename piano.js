@@ -173,7 +173,17 @@ JSPiano = (function(){
 
         function seekAudioBegin() {
             if(audio){
-                try {audio.pause(); audio.currentTime=0;} catch(e) { audio.load();}
+                switch(audioSet.seekMode){
+                case 1: //for Chrome6.0.447.0
+                    audio.load();
+                    break;
+                case 2: //for Firefox3.6.6, Opera10.53
+                    audio.pause(); audio.currentTime=0;
+                    break;
+                default:
+                    try {audio.pause(); audio.currentTime=0;} catch(e) { audio.load();}
+                    break;
+                }
             }
         };
         
@@ -643,13 +653,14 @@ JSPiano = (function(){
 
     // class AudioSet
     
-    function createAudioSet(funcProgress, funcCompleted) {
+    function createAudioSet(funcProgress, funcCompleted, notenumMin, notenumMax, seekMode) {
         var audioSet = {
-            notenumMin: 21,
-            notenumMax: 108,
+            notenumMin: notenumMin || 21,
+            notenumMax: notenumMax || 108,
             notes: [],
             countTotal: 0,
-            countLoaded: 0
+            countLoaded: 0,
+            seekMode: seekMode
         };
         var mediaType = getSupportedMediaType();
         if(!mediaType){
@@ -680,7 +691,7 @@ JSPiano = (function(){
         return div;
     };
     
-    function createPiano() {
+    function createPiano(notenumMin, notenumMax, seekMode) {
         var pianoDiv = createPianoDiv();
         
         var loadingText = document.createTextNode("Loading...");
@@ -696,7 +707,7 @@ JSPiano = (function(){
             pianoDiv.appendChild(createPianoKeyboard(audioSet).getElement());
         };
         
-        var audioSet = createAudioSet(funcProgress, funcCompleted);
+        var audioSet = createAudioSet(funcProgress, funcCompleted, notenumMin, notenumMax, seekMode);
 
         pianoDiv.audioSet = audioSet;
         var pianoObj = {
@@ -709,9 +720,9 @@ JSPiano = (function(){
     // public functions
 
     return {
-        insertKeyboardAfterThisScriptNode: function() {
+        insertKeyboardAfterThisScriptNode: function(notenumMin, notenumMax, seekMode) {
             var parent = getLastScriptNode().parentNode;
-            parent.appendChild(createPiano().getElement());
+            parent.appendChild(createPiano(notenumMin, notenumMax, seekMode).getElement());
         }
     };
 })();
