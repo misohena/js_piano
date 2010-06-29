@@ -698,6 +698,7 @@ JSPiano = (function(){
         
         var audioSet = createAudioSet(funcProgress, funcCompleted);
 
+        pianoDiv.audioSet = audioSet;
         var pianoObj = {
             getElement: function() { return pianoDiv;},
             audioSet: audioSet,
