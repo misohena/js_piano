@@ -627,9 +627,11 @@ JSPiano = (function(){
         var audio = new Audio("./sounds/piano/44khz_" + mediaType + "/" + ("00" + notenum).slice(-3) + "." + mediaType);
         function onCanPlayThrough() {
             audio.removeEventListener("canplaythrough", onCanPlayThrough, true);
+            audio.removeEventListener("error", onError, true);
             funcLoaded();
         };
         function onError() {
+            audio.removeEventListener("canplaythrough", onCanPlayThrough, true);
             audio.removeEventListener("error", onError, true);
             funcLoaded();
         };
