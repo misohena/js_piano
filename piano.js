@@ -601,13 +601,13 @@ JSPiano = (function(){
             var audio = new Audio("");
             var result;
             if(audio.canPlayType){
-                result = audio.canPlayType("audio/ogg");
-                if(result != "no" && result != ""){
-                    return "ogg";
-                }
                 result = audio.canPlayType("audio/mpeg");
                 if(result != "no" && result != ""){
                     return "mp3";
+                }
+                result = audio.canPlayType("audio/ogg");
+                if(result != "no" && result != ""){
+                    return "ogg";
                 }
                 result = audio.canPlayType("audio/wav");
                 if(result != "no" && result != ""){
